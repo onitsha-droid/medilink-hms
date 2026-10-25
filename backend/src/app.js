@@ -13,6 +13,7 @@ const patientRouter = require('./routes/patients');
 const clinicRouter = require('./routes/clinics');
 const appointmentRouter = require('./routes/appointments');
 const queueRouter = require('./routes/queue');
+const vitalsRouter = require('./routes/vitals');
 
 /**
  * createApp — builds and returns the Express application.
@@ -48,6 +49,7 @@ function createApp(extraRoutes) {
   app.use('/clinics', clinicRouter);
   app.use('/appointments', appointmentRouter);
   app.use('/queue', queueRouter);
+  app.use('/vitals', vitalsRouter);
 
   // ── Optional test / extra routes (must be before 404 handler) ─────────────
   if (typeof extraRoutes === 'function') {
