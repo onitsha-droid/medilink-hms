@@ -1,11 +1,12 @@
 'use strict';
 
 const http = require('http');
-const app = require('./app');
+const createApp = require('./app');
 const { connectDB } = require('./config/database');
 const logger = require('./utils/logger');
 const { port } = require('./config');
 
+const app = createApp();
 const server = http.createServer(app);
 
 async function start() {
