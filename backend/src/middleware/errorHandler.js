@@ -12,6 +12,11 @@ const logger = require('../utils/logger');
  */
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
+  // ── Mongoose CastError (e.g. invalid ObjectId) ──────────────────────────
+  if (err.name === 'CastError') {
+    return res.status(400).json({ error: `Invalid value for field '${err.path}'` });
+  }
+
   // ── Mongoose validation error ───────────────────────────────────────────
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map((e) => e.message);

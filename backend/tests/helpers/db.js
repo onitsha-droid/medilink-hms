@@ -1,33 +1,31 @@
 'use strict';
 
 /**
- * Shared test helper: spins up an in-memory MongoDB instance for the duration
- * of a Jest test suite, and tears it down afterwards.
+ * Shared test DB helper.
  *
- * Usage in a test file:
- *   const { setupTestDB } = require('./helpers/db');
- *   setupTestDB();
+ * Spins up a single-node MongoMemoryReplSet (replica set) so that Mongoose
+ * multi-document transactions work in tests exactly as they do in production.
+ * Tears everything down after the suite and wipes collections between tests.
  */
 
 const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
+const { MongoMemoryReplSet } = require('mongodb-memory-server');
 
-let mongoServer;
+let replSet;
 
 function setupTestDB() {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
-    const uri = mongoServer.getUri();
+    replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+    const uri = replSet.getUri();
     await mongoose.connect(uri);
   });
 
   afterAll(async () => {
     await mongoose.disconnect();
-    await mongoServer.stop();
+    await replSet.stop();
   });
 
   afterEach(async () => {
-    // Clean all collections between tests for isolation
     const collections = mongoose.connection.collections;
     for (const key of Object.keys(collections)) {
       await collections[key].deleteMany({});
