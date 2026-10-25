@@ -1,0 +1,50 @@
+name: medilink_hms
+description: MediLink Hospital Management System — Flutter mobile app
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Navigation
+  go_router: ^13.2.0
+
+  # Offline cache
+  hive_flutter: ^1.1.0
+
+  # Networking
+  dio: ^5.4.3+1
+
+  # Socket.IO client
+  socket_io_client: ^2.0.3+1
+
+  # JSON serialization
+  json_annotation: ^4.9.0
+
+  # QR code generation & scanning
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.1.0
+
+  # Utilities
+  uuid: ^4.4.0
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.9
+  riverpod_generator: ^2.4.0
+  json_serializable: ^6.8.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
