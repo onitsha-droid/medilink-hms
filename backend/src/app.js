@@ -9,6 +9,7 @@ const requestLogger = require('./middleware/requestLogger');
 const { errorHandler } = require('./middleware/errorHandler');
 const healthRouter = require('./routes/health');
 const authRouter = require('./routes/auth');
+const patientRouter = require('./routes/patients');
 
 /**
  * createApp — builds and returns the Express application.
@@ -40,6 +41,7 @@ function createApp(extraRoutes) {
   // ── Business routes ────────────────────────────────────────────────────────
   app.use('/health', healthRouter);
   app.use('/auth', authRouter);
+  app.use('/patients', patientRouter);
 
   // ── Optional test / extra routes (must be before 404 handler) ─────────────
   if (typeof extraRoutes === 'function') {
