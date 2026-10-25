@@ -3,11 +3,16 @@
 const http = require('http');
 const createApp = require('./app');
 const { connectDB } = require('./config/database');
+const { createSocketServer } = require('./socket/socketServer');
 const logger = require('./utils/logger');
 const { port } = require('./config');
 
 const app = createApp();
 const server = http.createServer(app);
+
+// Attach Socket.IO and make `io` accessible to route handlers via app.get('io')
+const io = createSocketServer(server);
+app.set('io', io);
 
 async function start() {
   try {
@@ -23,7 +28,6 @@ async function start() {
   }
 }
 
-// ── Graceful shutdown ─────────────────────────────────────────────────────────
 async function shutdown(signal) {
   logger.info(`${signal} received — shutting down gracefully`);
   server.close(async () => {
@@ -39,4 +43,4 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 
 start();
 
-module.exports = server; // exported for tests
+module.exports = server;
