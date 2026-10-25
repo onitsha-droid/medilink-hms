@@ -1,0 +1,63 @@
+version: "3.9"
+
+# ── MediLink HMS — local development stack ────────────────────────────────────
+# Runs the Node.js API alongside a single-node MongoDB replica set.
+# A replica set is required for Mongoose multi-document transactions.
+#
+# Usage:
+#   docker compose up --build          # start everything
+#   docker compose down -v             # stop and remove volumes
+#
+# The API is available at http://localhost:3000
+# Mongo is reachable at mongodb://localhost:27017 from the host.
+
+services:
+  # ── MongoDB (single-node replica set) ──────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: medilink-mongo
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./docker/mongo-init/init-replica.sh:/docker-entrypoint-initdb.d/init-replica.sh:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "try { rs.status().ok } catch(e) { rs.initiate().ok }",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Node.js API ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: medilink-api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override the DB URI to point at the in-compose mongo service
+      MONGODB_URI: mongodb://mongo:27017/medilink?replicaSet=rs0
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      # Mount source for hot-reload in dev (nodemon watches src/)
+      - ./backend/src:/app/src:ro
+
+volumes:
+  mongo_data:
