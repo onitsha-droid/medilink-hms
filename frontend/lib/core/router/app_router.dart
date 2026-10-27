@@ -4,6 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../api/auth_models.dart';
 import '../providers/auth_provider.dart';
 import '../../features/auth/auth.dart';
+import '../../features/doctor/doctor_dashboard.dart';
+import '../../features/lab_scientist/lab_worklist_screen.dart';
+import '../../features/pharmacist/pharmacist_inbox_screen.dart';
+import '../../features/billing_officer/billing_dashboard.dart';
+import '../../features/nurse/nurse_triage_screen.dart';
 
 // ── Route names ───────────────────────────────────────────────────────────────
 abstract class Routes {
@@ -81,22 +86,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.doctorHome,
-        builder: (_, __) => const _RoleDashboard(role: UserRole.doctor),
+        builder: (_, __) => const DoctorDashboard(),
       ),
       GoRoute(
         path: Routes.labHome,
-        builder: (_, __) =>
-            const _RoleDashboard(role: UserRole.labScientist),
+        builder: (_, __) => const LabWorklistScreen(),
       ),
       GoRoute(
         path: Routes.pharmacistHome,
-        builder: (_, __) =>
-            const _RoleDashboard(role: UserRole.pharmacist),
+        builder: (_, __) => const PharmacistInboxScreen(),
       ),
       GoRoute(
         path: Routes.billingHome,
-        builder: (_, __) =>
-            const _RoleDashboard(role: UserRole.billingOfficer),
+        builder: (_, __) => const BillingDashboard(),
       ),
       GoRoute(
         path: Routes.adminHome,
