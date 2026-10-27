@@ -14,6 +14,12 @@ const clinicRouter = require('./routes/clinics');
 const appointmentRouter = require('./routes/appointments');
 const queueRouter = require('./routes/queue');
 const vitalsRouter = require('./routes/vitals');
+const encountersRouter = require('./routes/encounters');
+const labRequestsRouter = require('./routes/labRequests');
+const prescriptionsRouter = require('./routes/prescriptions');
+const inventoryRouter = require('./routes/inventory');
+const invoicesRouter = require('./routes/invoices');
+const paymentsRouter = require('./routes/payments');
 
 /**
  * createApp — builds and returns the Express application.
@@ -35,6 +41,9 @@ function createApp(extraRoutes) {
   // ── Request logging ────────────────────────────────────────────────────────
   app.use(requestLogger());
 
+  // ── Paystack webhook — must be BEFORE express.json() so it gets the raw body
+  app.use('/payments/webhook', express.raw({ type: '*/*' }));
+
   // ── Body parsing ───────────────────────────────────────────────────────────
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -50,6 +59,12 @@ function createApp(extraRoutes) {
   app.use('/appointments', appointmentRouter);
   app.use('/queue', queueRouter);
   app.use('/vitals', vitalsRouter);
+  app.use('/encounters', encountersRouter);
+  app.use('/lab-requests', labRequestsRouter);
+  app.use('/prescriptions', prescriptionsRouter);
+  app.use('/inventory', inventoryRouter);
+  app.use('/invoices', invoicesRouter);
+  app.use('/payments', paymentsRouter);
 
   // ── Optional test / extra routes (must be before 404 handler) ─────────────
   if (typeof extraRoutes === 'function') {
