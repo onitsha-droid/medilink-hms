@@ -64,4 +64,35 @@ router.get(
   },
 );
 
+// ── PATCH /clinics/:id — Admin updates a clinic ───────────────────────────────
+router.patch(
+  '/:id',
+  authorize('Admin'),
+  [param('id').isMongoId(), ...clinicRules.map((r) => r.optional())],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
+      const updates = {};
+      if (req.body.name !== undefined) updates.name = req.body.name;
+      if (req.body.description !== undefined) updates.description = req.body.description;
+      if (req.body.avgConsultationMinutes !== undefined) {
+        updates.avgConsultationMinutes = req.body.avgConsultationMinutes;
+      }
+      if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
+
+      const clinic = await Clinic.findByIdAndUpdate(
+        req.params.id,
+        { $set: updates },
+        { new: true, runValidators: true },
+      );
+      if (!clinic) return next(createError('Clinic not found', 404));
+      return res.status(200).json({ clinic });
+    } catch (err) {
+      return next(err);
+    }
+  },
+);
+
 module.exports = router;

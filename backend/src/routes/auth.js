@@ -75,4 +75,64 @@ router.get('/me', authenticate, async (req, res, next) => {
   }
 });
 
+// ── GET /auth/users — Admin lists all staff ───────────────────────────────────
+const { authorize } = require('../middleware/auth');
+const { ROLES } = require('../models/User');
+
+router.get('/users', authenticate, authorize('Admin'), async (_req, res, next) => {
+  try {
+    const users = await User.find({}).select('-password').lean();
+    return res.status(200).json({ users });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── PATCH /auth/users/:id/role — Admin changes a user's role ─────────────────
+router.patch(
+  '/users/:id/role',
+  authenticate,
+  authorize('Admin'),
+  [
+    body('role').isIn(ROLES).withMessage(`role must be one of: ${ROLES.join(', ')}`),
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
+      const user = await User.findByIdAndUpdate(
+        req.params.id,
+        { $set: { role: req.body.role } },
+        { new: true, runValidators: true },
+      ).select('-password');
+
+      if (!user) return next(createError('User not found', 404));
+      return res.status(200).json({ user });
+    } catch (err) {
+      return next(err);
+    }
+  },
+);
+
+// ── PATCH /auth/users/:id/deactivate — Admin deactivates a user ──────────────
+router.patch(
+  '/users/:id/deactivate',
+  authenticate,
+  authorize('Admin'),
+  async (req, res, next) => {
+    try {
+      const user = await User.findByIdAndUpdate(
+        req.params.id,
+        { $set: { isActive: false } },
+        { new: true },
+      ).select('-password');
+      if (!user) return next(createError('User not found', 404));
+      return res.status(200).json({ user });
+    } catch (err) {
+      return next(err);
+    }
+  },
+);
+
 module.exports = router;

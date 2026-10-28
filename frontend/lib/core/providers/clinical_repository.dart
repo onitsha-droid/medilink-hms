@@ -393,4 +393,60 @@ class ClinicalRepository {
         .map((u) => Map<String, dynamic>.from(u as Map))
         .toList();
   }
+
+  Future<Map<String, dynamic>> changeUserRole({
+    required String userId,
+    required String role,
+  }) async {
+    final res = await _api.dio.patch<Map<String, dynamic>>(
+      '/auth/users/$userId/role',
+      data: {'role': role},
+    );
+    return res.data!;
+  }
+
+  // ── Clinic management (Admin) ──────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> listClinics() async {
+    final res =
+        await _api.dio.get<Map<String, dynamic>>('/clinics');
+    return (res.data!['clinics'] as List)
+        .map((c) => Map<String, dynamic>.from(c as Map))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createClinic({
+    required String name,
+    String? description,
+    int avgConsultationMinutes = 15,
+  }) async {
+    final res = await _api.dio.post<Map<String, dynamic>>(
+      '/clinics',
+      data: {
+        'name': name,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        'avgConsultationMinutes': avgConsultationMinutes,
+      },
+    );
+    return res.data!;
+  }
+
+  Future<Map<String, dynamic>> updateClinic({
+    required String clinicId,
+    String? name,
+    String? description,
+    int? avgConsultationMinutes,
+  }) async {
+    final res = await _api.dio.patch<Map<String, dynamic>>(
+      '/clinics/$clinicId',
+      data: {
+        if (name != null) 'name': name,
+        if (description != null) 'description': description,
+        if (avgConsultationMinutes != null)
+          'avgConsultationMinutes': avgConsultationMinutes,
+      },
+    );
+    return res.data!;
+  }
 }
