@@ -219,7 +219,8 @@ void main() {
           _wrap(const PatientBillScreen(patientId: 'pat1'), mockRepo));
       await tester.pumpAndSettle();
 
-      expect(find.text('₦2000.00'), findsOneWidget);
+      // Amount appears in both the line-item row and the Total row
+      expect(find.text('₦2000.00'), findsAtLeastNWidgets(1));
       expect(find.text('Pay Now'), findsOneWidget);
     });
 
