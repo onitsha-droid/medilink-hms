@@ -8,6 +8,7 @@ const { Invoice } = require('../models/Invoice');
 const { Payment } = require('../models/Payment');
 const { LabRequest } = require('../models/LabRequest');
 const { Prescription } = require('../models/Prescription');
+const stellar = require('../services/stellar');
 const { authenticate, authorize } = require('../middleware/auth');
 const { createError } = require('../middleware/errorHandler');
 const config = require('../config');
@@ -211,6 +212,135 @@ router.get(
 
       if (!invoice) return next(createError('Invoice not found', 404));
       return res.status(200).json({ invoice });
+    } catch (err) {
+      return next(err);
+    }
+  },
+);
+
+// ── POST /payments/stablecoin/request — generate a USDC payment request ───────
+// Patient (or Billing Officer) asks for the hospital wallet address + amount.
+// No money moves here — this just returns the payment details.
+router.post(
+  '/stablecoin/request',
+  authenticate,
+  authorize('Patient', 'Billing Officer', 'Admin'),
+  [body('invoiceId').isMongoId().withMessage('invoiceId must be a valid Mongo ID')],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
+      const invoice = await Invoice.findById(req.body.invoiceId);
+      if (!invoice) return next(createError('Invoice not found', 404));
+      if (invoice.status !== 'pending') {
+        return next(createError(`Invoice is already ${invoice.status}`, 400));
+      }
+      if (invoice.totalKobo <= 0) {
+        return next(createError('Invoice amount must be greater than zero', 400));
+      }
+
+      let paymentRequest;
+      try {
+        paymentRequest = stellar.buildPaymentRequest(invoice);
+      } catch (stellarErr) {
+        logger.error('Stellar config error', { message: stellarErr.message });
+        return next(createError('Stellar payment not configured on this server', 503));
+      }
+
+      return res.status(200).json({ paymentRequest });
+    } catch (err) {
+      return next(err);
+    }
+  },
+);
+
+// ── POST /payments/stablecoin/confirm — poll Horizon and confirm payment ──────
+// Idempotent: calling again on an already-paid invoice is a no-op.
+router.post(
+  '/stablecoin/confirm',
+  authenticate,
+  authorize('Patient', 'Billing Officer', 'Admin'),
+  [body('invoiceId').isMongoId().withMessage('invoiceId must be a valid Mongo ID')],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
+      const invoice = await Invoice.findById(req.body.invoiceId);
+      if (!invoice) return next(createError('Invoice not found', 404));
+
+      // Idempotency: already paid via stablecoin
+      if (invoice.status === 'paid' && invoice.paymentMethod === 'stablecoin') {
+        return res.status(200).json({ invoice, alreadyPaid: true });
+      }
+      if (invoice.status === 'paid') {
+        return next(createError('Invoice already paid via another method', 400));
+      }
+      if (invoice.status !== 'pending') {
+        return next(createError(`Invoice is ${invoice.status}`, 400));
+      }
+
+      const expectedMemo = invoice._id.toString().slice(0, 28);
+      const expectedUsdc = invoice.totalKobo / 100;
+
+      let verifyResult;
+      try {
+        verifyResult = await stellar.verifyPaymentToHospital({
+          expectedMemo,
+          expectedUsdcAmount: expectedUsdc,
+        });
+      } catch (stellarErr) {
+        logger.error('Horizon verification error', { message: stellarErr.message });
+        return next(createError('Could not reach Stellar network to verify payment', 503));
+      }
+
+      if (!verifyResult.found) {
+        return res.status(202).json({
+          confirmed: false,
+          message: 'Payment not yet detected on Horizon. Try again shortly.',
+        });
+      }
+
+      // ── Mark paid + create Payment + unlock dependents (transaction) ──────
+      const session = await mongoose.startSession();
+      await session.withTransaction(async () => {
+        // Re-check inside transaction to prevent race
+        const fresh = await Invoice.findById(invoice._id).session(session);
+        if (fresh.status === 'paid') return; // already handled
+
+        fresh.status = 'paid';
+        fresh.paymentMethod = 'stablecoin';
+        fresh.paidAt = new Date();
+        fresh.lastWebhookEventId = verifyResult.txHash; // reuse idempotency field
+        await fresh.save({ session });
+
+        await Payment.create(
+          [
+            {
+              invoice: fresh._id,
+              patient: fresh.patient,
+              amountKobo: fresh.totalKobo,
+              method: 'stablecoin',
+              reference: verifyResult.txHash,
+              gatewayEventId: verifyResult.txHash,
+              status: 'success',
+              paidAt: new Date(),
+            },
+          ],
+          { session },
+        );
+
+        await LabRequest.updateMany(
+          { invoice: fresh._id, status: 'requested' },
+          { $set: { status: 'paid' } },
+          { session },
+        );
+      });
+      await session.endSession();
+
+      const updated = await Invoice.findById(invoice._id).lean();
+      return res.status(200).json({ confirmed: true, invoice: updated });
     } catch (err) {
       return next(err);
     }
