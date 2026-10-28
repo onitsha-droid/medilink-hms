@@ -4,6 +4,7 @@ const http = require('http');
 const createApp = require('./app');
 const { connectDB } = require('./config/database');
 const { createSocketServer } = require('./socket/socketServer');
+const { startAnchorJob } = require('./services/auditService');
 const logger = require('./utils/logger');
 const { port } = require('./config');
 
@@ -21,6 +22,7 @@ async function start() {
       logger.info(`MediLink API listening on port ${port}`, {
         env: process.env.NODE_ENV,
       });
+      startAnchorJob();
     });
   } catch (err) {
     logger.error('Failed to start server', { err: err.message });

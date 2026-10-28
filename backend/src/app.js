@@ -21,6 +21,7 @@ const inventoryRouter = require('./routes/inventory');
 const invoicesRouter = require('./routes/invoices');
 const paymentsRouter = require('./routes/payments');
 const hmoClaimsRouter = require('./routes/hmoClaims');
+const auditLogsRouter = require('./routes/auditLogs');
 
 /**
  * createApp — builds and returns the Express application.
@@ -67,6 +68,7 @@ function createApp(extraRoutes) {
   app.use('/invoices', invoicesRouter);
   app.use('/payments', paymentsRouter);
   app.use('/hmo-claims', hmoClaimsRouter);
+  app.use('/audit-logs', auditLogsRouter);
 
   // ── Optional test / extra routes (must be before 404 handler) ─────────────
   if (typeof extraRoutes === 'function') {

@@ -1,20 +1,17 @@
 'use strict';
 
 const logger = require('../utils/logger');
+const { createAuditLog } = require('./auditService');
 
 /**
- * emitRecordAccessed — fires an internal "record.accessed" event via
- * Socket.IO (if available) and logs it locally.
+ * emitRecordAccessed — fires record.accessed via Socket.IO and persists an
+ * AuditLog document with a salted SHA-256 hash.
  *
- * Only non-PHI metadata is emitted. The Stellar anchoring of this event
- * is DEFERRED (Day 3 / blockchain sprint).
+ * Only non-PHI metadata is emitted or stored:
+ *   userId, patientId (both Mongo ObjectId strings), action string, timestamp.
  *
- * @param {object} io          Socket.IO server instance (may be undefined in tests)
- * @param {object} params
- * @param {string} params.userId      User._id performing the action
- * @param {string} params.patientId   Patient._id being accessed
- * @param {string} params.action      e.g. 'read:patient_history', 'write:clinical_note'
- * @param {string} [params.encounterId]  Optional Encounter._id
+ * @param {object} io   Socket.IO server instance (may be null in tests)
+ * @param {{ userId, patientId, action, encounterId? }} params
  */
 function emitRecordAccessed(io, { userId, patientId, action, encounterId }) {
   const payload = {
@@ -28,10 +25,19 @@ function emitRecordAccessed(io, { userId, patientId, action, encounterId }) {
   logger.info('record.accessed', payload);
 
   if (io) {
-    // Emit to an internal audit room that admin clients may subscribe to.
-    // No PHI is included in the event payload.
     io.to('audit:records').emit('record.accessed', payload);
   }
+
+  // Persist asynchronously — do not await so callers are never blocked
+  createAuditLog({
+    userId,
+    patientId,
+    action,
+    encounterId: encounterId || null,
+    timestamp: new Date(),
+  }).catch((err) =>
+    logger.error('Failed to persist AuditLog', { message: err.message }),
+  );
 }
 
 module.exports = { emitRecordAccessed };
