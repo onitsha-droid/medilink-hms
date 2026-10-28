@@ -9,6 +9,7 @@ import '../../features/lab_scientist/lab_worklist_screen.dart';
 import '../../features/pharmacist/pharmacist_inbox_screen.dart';
 import '../../features/billing_officer/billing_dashboard.dart';
 import '../../features/nurse/nurse_triage_screen.dart';
+import '../../features/admin/admin_dashboard_screen.dart';
 
 // ── Route names ───────────────────────────────────────────────────────────────
 abstract class Routes {
@@ -102,7 +103,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.adminHome,
-        builder: (_, __) => const _RoleDashboard(role: UserRole.admin),
+        builder: (_, __) => const AdminDashboardScreen(),
       ),
     ],
   );

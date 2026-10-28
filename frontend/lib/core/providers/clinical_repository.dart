@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/clinical_models.dart';
+import '../api/hmo_models.dart';
 
 /// Central repository for all clinical endpoints.
 /// Screens call methods here; providers hold the async state.
@@ -301,5 +302,70 @@ class ClinicalRepository {
         .get<Map<String, dynamic>>('/payments/status/$invoiceId');
     return Invoice.fromJson(
         Map<String, dynamic>.from(res.data!['invoice'] as Map));
+  }
+
+  // ── HMO Claims ─────────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> submitHmoClaim({
+    required String invoiceId,
+    required int serviceCode,
+  }) async {
+    final res = await _api.dio.post<Map<String, dynamic>>(
+      '/hmo-claims',
+      data: {'invoiceId': invoiceId, 'serviceCode': serviceCode},
+    );
+    return res.data!;
+  }
+
+  Future<List<HmoClaim>> getHmoClaims({String? status, String? invoiceId}) async {
+    final res = await _api.dio.get<Map<String, dynamic>>(
+      '/hmo-claims',
+      queryParameters: {
+        if (status != null) 'status': status,
+        if (invoiceId != null) 'invoiceId': invoiceId,
+      },
+    );
+    return (res.data!['claims'] as List)
+        .map((c) => HmoClaim.fromJson(Map<String, dynamic>.from(c as Map)))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> resolveHmoClaim({
+    required String claimId,
+    required String resolution,
+    String? note,
+  }) async {
+    final res = await _api.dio.patch<Map<String, dynamic>>(
+      '/hmo-claims/$claimId/resolve',
+      data: {'resolution': resolution, if (note != null) 'note': note},
+    );
+    return res.data!;
+  }
+
+  // ── Admin Analytics ────────────────────────────────────────────────────────
+
+  Future<AdminDashboard> getAdminDashboard() async {
+    final res =
+        await _api.dio.get<Map<String, dynamic>>('/admin/dashboard');
+    return AdminDashboard.fromJson(res.data!);
+  }
+
+  Future<List<ClinicQueueMetric>> getQueueMetrics() async {
+    final res =
+        await _api.dio.get<Map<String, dynamic>>('/admin/queue-metrics');
+    return (res.data!['metrics'] as List)
+        .map((m) =>
+            ClinicQueueMetric.fromJson(Map<String, dynamic>.from(m as Map)))
+        .toList();
+  }
+
+  // ── Staff management (Admin) ───────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> listUsers() async {
+    final res =
+        await _api.dio.get<Map<String, dynamic>>('/auth/users');
+    return (res.data!['users'] as List)
+        .map((u) => Map<String, dynamic>.from(u as Map))
+        .toList();
   }
 }
