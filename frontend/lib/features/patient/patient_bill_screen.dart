@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/api/clinical_models.dart';
 import '../../core/providers/clinical_repository.dart';
 import '../../core/providers/auth_provider.dart';
+import '../billing_officer/hmo_claims_screen.dart' show PatientCoverageView;
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -158,21 +159,44 @@ class _PatientInvoiceCard extends StatelessWidget {
             ],
             if (isPending) ...[
               const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.payment),
-                  label: const Text('Pay Now'),
-                  onPressed: () =>
-                      Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => PaymentStatusScreen(
-                        invoice: invoice,
-                        onSuccess: onPaid,
+              // ── HMO coverage summary (if a claim exists) ──────────
+              PatientCoverageView(invoiceId: invoice.id),
+              const SizedBox(height: 10),
+              // ── Payment method choice ──────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.payment, size: 16),
+                      label: const Text('Pay (Fiat)'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PaymentStatusScreen(
+                            invoice: invoice,
+                            paymentMethod: 'fiat',
+                            onSuccess: onPaid,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.currency_exchange, size: 16),
+                      label: const Text('Pay (USDC)'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PaymentStatusScreen(
+                            invoice: invoice,
+                            paymentMethod: 'stablecoin',
+                            onSuccess: onPaid,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -189,10 +213,13 @@ class PaymentStatusScreen extends ConsumerStatefulWidget {
     super.key,
     required this.invoice,
     required this.onSuccess,
+    this.paymentMethod = 'fiat',
   });
 
   final Invoice invoice;
   final VoidCallback onSuccess;
+  /// 'fiat' uses Paystack; 'stablecoin' uses Stellar USDC.
+  final String paymentMethod;
 
   @override
   ConsumerState<PaymentStatusScreen> createState() =>
@@ -214,48 +241,59 @@ class _PaymentStatusScreenState
   }
 
   Future<void> _initializePayment() async {
-    final authState = ref.read(authProvider);
-    final email = authState is AuthStateAuthenticated
-        ? authState.user.email
-        : '';
-    if (email.isEmpty) {
-      setState(() => _error = 'Cannot determine email; please log in again.');
-      return;
-    }
-
-    setState(() {
-      _initializing = true;
-      _error = null;
-    });
+    setState(() { _initializing = true; _error = null; });
     try {
-      final result = await ref
-          .read(clinicalRepositoryProvider)
-          .initializePayment(
-            invoiceId: widget.invoice.id,
-            email: email,
-          );
-      setState(() => _authUrl = result['authorizationUrl']);
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      setState(() => _initializing = false);
-    }
-  }
-
-  Future<void> _checkStatus() async {
-    setState(() => _polling = true);
-    try {
-      final updated = await ref
-          .read(clinicalRepositoryProvider)
-          .getPaymentStatus(widget.invoice.id);
-      setState(() => _latestInvoice = updated);
-      if (updated.status == 'paid') {
-        widget.onSuccess();
+      if (widget.paymentMethod == 'stablecoin') {
+        // Request USDC payment details from the backend
+        final result = await ref
+            .read(clinicalRepositoryProvider)
+            .initializeStablecoinPayment(invoiceId: widget.invoice.id);
+        setState(() => _authUrl = result['paymentRequest']?['destination']?.toString());
+        _stablecoinRequest = Map<String, dynamic>.from(
+            result['paymentRequest'] as Map? ?? {});
+      } else {
+        final authState = ref.read(authProvider);
+        final email = authState is AuthStateAuthenticated
+            ? authState.user.email : '';
+        if (email.isEmpty) {
+          setState(() => _error = 'Cannot determine email; please log in again.');
+          return;
+        }
+        final result = await ref
+            .read(clinicalRepositoryProvider)
+            .initializePayment(invoiceId: widget.invoice.id, email: email);
+        setState(() => _authUrl = result['authorizationUrl']);
       }
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
-      setState(() => _polling = false);
+      if (mounted) setState(() => _initializing = false);
+    }
+  }
+
+  Map<String, dynamic> _stablecoinRequest = {};
+
+  Future<void> _checkStatus() async {
+    setState(() => _polling = true);
+    try {
+      Invoice updated;
+      if (widget.paymentMethod == 'stablecoin') {
+        final res = await ref
+            .read(clinicalRepositoryProvider)
+            .confirmStablecoinPayment(invoiceId: widget.invoice.id);
+        // confirmStablecoinPayment returns the invoice if confirmed, or throws
+        updated = res;
+      } else {
+        updated = await ref
+            .read(clinicalRepositoryProvider)
+            .getPaymentStatus(widget.invoice.id);
+      }
+      setState(() => _latestInvoice = updated);
+      if (updated.status == 'paid') widget.onSuccess();
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _polling = false);
     }
   }
 
@@ -320,19 +358,43 @@ class _PaymentStatusScreenState
               )
             else ...[
               if (_authUrl != null) ...[
-                const Text(
-                  'Complete your payment in the browser, then '
-                  'tap "I have paid" to confirm.',
-                ),
-                const SizedBox(height: 12),
-                // In a real build this would open an in-app WebView or
-                // url_launcher.  Here we display the URL and a confirm button.
-                SelectableText(
-                  _authUrl!,
-                  style: const TextStyle(
-                      color: Colors.blue,
-                      decoration: TextDecoration.underline),
-                ),
+                if (widget.paymentMethod == 'stablecoin') ...[
+                  // ── Stablecoin instructions ──────────────────────
+                  const Text(
+                    'Send the exact USDC amount to the wallet address below, '
+                    'then tap "I have paid" to confirm on Horizon.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  _InfoRow('Asset', 'USDC (Testnet)'),
+                  _InfoRow('Destination',
+                      _stablecoinRequest['destination']?.toString() ?? '—'),
+                  _InfoRow('Amount',
+                      '${_stablecoinRequest['amount'] ?? '—'} USDC'),
+                  _InfoRow('Memo',
+                      _stablecoinRequest['memo']?.toString() ?? '—'),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Include the exact memo so the payment can be matched.',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.orange.shade800,
+                        fontStyle: FontStyle.italic),
+                  ),
+                ] else ...[
+                  // ── Fiat / Paystack URL ──────────────────────────
+                  const Text(
+                    'Complete your payment in the browser, then '
+                    'tap "I have paid" to confirm.',
+                  ),
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    _authUrl!,
+                    style: const TextStyle(
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: _polling ? null : _checkStatus,
@@ -340,8 +402,7 @@ class _PaymentStatusScreenState
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2))
+                          child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.refresh),
                   label: const Text('I have paid — check status'),
                 ),
@@ -353,10 +414,13 @@ class _PaymentStatusScreenState
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white))
-                      : const Icon(Icons.payment),
-                  label: const Text('Proceed to Payment'),
+                              strokeWidth: 2, color: Colors.white))
+                      : Icon(widget.paymentMethod == 'stablecoin'
+                          ? Icons.currency_exchange
+                          : Icons.payment),
+                  label: Text(widget.paymentMethod == 'stablecoin'
+                      ? 'Get USDC Payment Details'
+                      : 'Proceed to Payment'),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
                   ),
@@ -381,8 +445,7 @@ class _StatusBadge extends StatelessWidget {
       _ => (Colors.orange, 'PENDING'),
     };
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(4),
@@ -390,9 +453,34 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(label,
           style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 11)),
+              color: color, fontWeight: FontWeight.bold, fontSize: 11)),
     );
   }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow(this.label, this.value);
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 90,
+              child: Text(label,
+                  style: TextStyle(
+                      color: Colors.grey.shade600, fontSize: 12)),
+            ),
+            Expanded(
+              child: SelectableText(value,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w500)),
+            ),
+          ],
+        ),
+      );
 }

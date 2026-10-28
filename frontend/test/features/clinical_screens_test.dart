@@ -221,7 +221,9 @@ void main() {
 
       // Amount appears in both the line-item row and the Total row
       expect(find.text('₦2000.00'), findsAtLeastNWidgets(1));
-      expect(find.text('Pay Now'), findsOneWidget);
+      // Button text changed to split fiat/stablecoin options
+      expect(find.text('Pay (Fiat)'), findsOneWidget);
+      expect(find.text('Pay (USDC)'), findsOneWidget);
     });
 
     testWidgets('shows empty state when no invoices', (tester) async {

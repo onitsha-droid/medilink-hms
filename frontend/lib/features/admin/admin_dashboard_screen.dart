@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../core/api/hmo_models.dart';
 import '../../core/providers/clinical_repository.dart';
 import '../../core/providers/auth_provider.dart';

@@ -304,6 +304,31 @@ class ClinicalRepository {
         Map<String, dynamic>.from(res.data!['invoice'] as Map));
   }
 
+  Future<Map<String, dynamic>> initializeStablecoinPayment({
+    required String invoiceId,
+  }) async {
+    final res = await _api.dio.post<Map<String, dynamic>>(
+      '/payments/stablecoin/request',
+      data: {'invoiceId': invoiceId},
+    );
+    return res.data!;
+  }
+
+  Future<Invoice> confirmStablecoinPayment({
+    required String invoiceId,
+  }) async {
+    final res = await _api.dio.post<Map<String, dynamic>>(
+      '/payments/stablecoin/confirm',
+      data: {'invoiceId': invoiceId},
+    );
+    // 202 means not yet confirmed — return the current invoice status
+    if (res.data!['confirmed'] == false) {
+      return getPaymentStatus(invoiceId);
+    }
+    return Invoice.fromJson(
+        Map<String, dynamic>.from(res.data!['invoice'] as Map));
+  }
+
   // ── HMO Claims ─────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> submitHmoClaim({
