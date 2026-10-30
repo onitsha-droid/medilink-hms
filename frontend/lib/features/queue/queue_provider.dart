@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as sio;
 import '../../core/api/api_client.dart';
+import '../../core/offline/offline_sync_service.dart';
 import '../../core/socket/socket_provider.dart';
 import 'queue_models.dart';
 
@@ -44,11 +45,15 @@ class QueueStateActive extends QueueState {
     required this.estimatedWaitMinutes,
     required this.clinicId,
     this.isUrgent = false,
+    this.isFromCache = false,
+    this.cachedAt,
   });
   final int position;
   final int estimatedWaitMinutes;
   final String clinicId;
   final bool isUrgent;
+  final bool isFromCache;
+  final DateTime? cachedAt;
 }
 
 class QueueStateError extends QueueState {
@@ -71,19 +76,55 @@ final queuePositionProvider = StateNotifierProvider.family<
 });
 
 class QueuePositionNotifier extends StateNotifier<QueueState> {
-  QueuePositionNotifier(this._socket, this._patientId, this._ref)
-      : super(const QueueStateLoading()) {
-    _subscribe();
+  QueuePositionNotifier(this._socket, this._patientId, this._ref, [QueueState? initialState])
+      : super(initialState ?? const QueueStateLoading()) {
+    if (initialState == null) {
+      _subscribe();
+    }
   }
 
   final sio.Socket? _socket;
   final String _patientId;
-  final Ref _ref;
+  final Ref? _ref;
 
   void _subscribe() {
+    // Check offline cache first
+    final offlineSync = _ref?.read(offlineSyncServiceProvider);
+    if (offlineSync != null) {
+      offlineSync.getCachedQueuePosition(_patientId).then((cached) {
+        if (cached != null && state is! QueueStateActive) {
+          state = QueueStateActive(
+            position: cached.position,
+            estimatedWaitMinutes: cached.estimatedWaitMinutes,
+            clinicId: cached.clinicId,
+            isUrgent: cached.isUrgent,
+            isFromCache: true,
+            cachedAt: cached.cachedAt,
+          );
+        }
+      });
+    }
+
     final socket = _socket;
     if (socket == null) {
-      state = const QueueStateDisconnected();
+      if (offlineSync != null) {
+        offlineSync.getCachedQueuePosition(_patientId).then((cached) {
+          if (cached != null) {
+            state = QueueStateActive(
+              position: cached.position,
+              estimatedWaitMinutes: cached.estimatedWaitMinutes,
+              clinicId: cached.clinicId,
+              isUrgent: cached.isUrgent,
+              isFromCache: true,
+              cachedAt: cached.cachedAt,
+            );
+          } else {
+            state = const QueueStateDisconnected();
+          }
+        });
+      } else {
+        state = const QueueStateDisconnected();
+      }
       return;
     }
 
@@ -97,11 +138,26 @@ class QueuePositionNotifier extends StateNotifier<QueueState> {
 
     socket.on('queue:position', (dynamic data) {
       if (data is Map) {
+        final pos = (data['position'] as num).toInt();
+        final wait = (data['estimatedWaitMinutes'] as num?)?.toInt() ?? 0;
+        final clinic = data['clinicId']?.toString() ?? '';
+        final current = state;
+        final isUrgent = current is QueueStateActive ? current.isUrgent : false;
+
         state = QueueStateActive(
-          position: (data['position'] as num).toInt(),
-          estimatedWaitMinutes:
-              (data['estimatedWaitMinutes'] as num?)?.toInt() ?? 0,
-          clinicId: data['clinicId']?.toString() ?? '',
+          position: pos,
+          estimatedWaitMinutes: wait,
+          clinicId: clinic,
+          isUrgent: isUrgent,
+          isFromCache: false,
+        );
+
+        offlineSync?.cacheQueuePosition(
+          _patientId,
+          position: pos,
+          estimatedWaitMinutes: wait,
+          clinicId: clinic,
+          isUrgent: isUrgent,
         );
       }
     });
@@ -114,12 +170,26 @@ class QueuePositionNotifier extends StateNotifier<QueueState> {
           estimatedWaitMinutes: current.estimatedWaitMinutes,
           clinicId: current.clinicId,
           isUrgent: true,
+          isFromCache: current.isFromCache,
+          cachedAt: current.cachedAt,
         );
       }
     });
 
     socket.on('disconnect', (dynamic _) {
-      state = const QueueStateDisconnected();
+      final current = state;
+      if (current is QueueStateActive) {
+        state = QueueStateActive(
+          position: current.position,
+          estimatedWaitMinutes: current.estimatedWaitMinutes,
+          clinicId: current.clinicId,
+          isUrgent: current.isUrgent,
+          isFromCache: true,
+          cachedAt: current.cachedAt ?? DateTime.now(),
+        );
+      } else {
+        state = const QueueStateDisconnected();
+      }
     });
 
     // Re-subscribe after reconnect

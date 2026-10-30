@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'core/offline/offline_sync_service.dart';
 import 'core/router/app_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+  OfflineSyncService.isHiveInitialized = true;
   runApp(
     // ProviderScope is the Riverpod root — must wrap the entire app.
     const ProviderScope(child: MediLinkApp()),

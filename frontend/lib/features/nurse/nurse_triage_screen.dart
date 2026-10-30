@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
+import '../../core/offline/offline_sync_service.dart';
 
 // ── Vitals form data ──────────────────────────────────────────────────────────
 
@@ -65,6 +66,16 @@ class VitalsRepository {
         .get<Map<String, dynamic>>('/vitals/triage-queue/$clinicId');
     return res.data!['triageQueue'] as List<dynamic>;
   }
+
+  Future<Map<String, dynamic>?> getVitalsByEntry(String queueEntryId) async {
+    try {
+      final res = await _api.dio
+          .get<Map<String, dynamic>>('/vitals/by-entry/$queueEntryId');
+      return res.data!['vitals'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 // ── Vitals Form Screen ────────────────────────────────────────────────────────
@@ -98,6 +109,7 @@ class _VitalsFormScreenState extends ConsumerState<VitalsFormScreen> {
 
   bool _loading = false;
   bool _submitted = false;
+  bool _savedOffline = false;
   String? _error;
   bool _autoUrgent = false;
 
@@ -155,28 +167,48 @@ class _VitalsFormScreenState extends ConsumerState<VitalsFormScreen> {
       setState(() {
         _loading = false;
         _submitted = true;
+        _savedOffline = false;
       });
     } catch (e) {
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
+      try {
+        final offlineService = ref.read(offlineSyncServiceProvider);
+        await offlineService.queueVitals(
+          queueEntryId: widget.queueEntryId,
+          patientName: widget.patientName,
+          vitalsData: _data.toJson(),
+        );
+        setState(() {
+          _loading = false;
+          _submitted = true;
+          _savedOffline = true;
+        });
+      } catch (_) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_submitted) {
-      return _SuccessScreen(patientName: widget.patientName);
+      return _SuccessScreen(
+        patientName: widget.patientName,
+        isOfflineQueued: _savedOffline,
+      );
     }
 
     return Scaffold(
       appBar: AppBar(title: Text('Vitals — ${widget.patientName}')),
       body: Form(
         key: _formKey,
-        child: ListView(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          children: [
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             // ── Auto-urgent warning ───────────────────────────────────────
             if (_autoUrgent)
               Container(
@@ -351,6 +383,7 @@ class _VitalsFormScreenState extends ConsumerState<VitalsFormScreen> {
                   : const Text('Save Vitals'),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -373,11 +406,44 @@ class _NurseTriageQueueScreenState
   List<dynamic>? _queue;
   bool _loading = true;
   String? _error;
+  int _pendingCount = 0;
+  bool _syncing = false;
+  String? _syncMessage;
 
   @override
   void initState() {
     super.initState();
     _loadQueue();
+    _checkPendingSync();
+  }
+
+  Future<void> _checkPendingSync() async {
+    try {
+      final pending =
+          await ref.read(offlineSyncServiceProvider).getQueuedVitals();
+      if (mounted) {
+        setState(() => _pendingCount = pending.length);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _syncOfflineQueue() async {
+    setState(() => _syncing = true);
+    final report = await ref
+        .read(offlineSyncServiceProvider)
+        .syncQueuedVitals(ref.read(vitalsRepositoryProvider));
+    final pending =
+        await ref.read(offlineSyncServiceProvider).getQueuedVitals();
+    if (mounted) {
+      setState(() {
+        _syncing = false;
+        _pendingCount = pending.length;
+        _syncMessage =
+            'Synced ${report.syncedCount} item(s)'
+            '${report.conflictCount > 0 ? ', ${report.conflictCount} conflict(s) resolved' : ''}';
+      });
+      await _loadQueue();
+    }
   }
 
   Future<void> _loadQueue() async {
@@ -410,11 +476,86 @@ class _NurseTriageQueueScreenState
           IconButton(
             key: const Key('refresh_triage_button'),
             icon: const Icon(Icons.refresh),
-            onPressed: _loadQueue,
+            onPressed: () async {
+              await _loadQueue();
+              await _checkPendingSync();
+            },
           ),
         ],
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          if (_syncing)
+            Container(
+              key: const Key('syncing_indicator'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.blue.shade100,
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Syncing offline vitals queue…',
+                    style: TextStyle(
+                      color: Colors.blue.shade900,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (_pendingCount > 0)
+            Container(
+              key: const Key('offline_indicator'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.amber.shade100,
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off, color: Colors.amber.shade900, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Offline queue: $_pendingCount vitals entry pending sync',
+                      key: const Key('sync_pending_text'),
+                      style: TextStyle(
+                        color: Colors.amber.shade900,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    key: const Key('sync_now_button'),
+                    icon: const Icon(Icons.sync, size: 16),
+                    label: const Text('Sync Now'),
+                    onPressed: _syncOfflineQueue,
+                  ),
+                ],
+              ),
+            )
+          else if (_syncMessage != null)
+            Container(
+              key: const Key('synced_indicator'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              color: Colors.green.shade100,
+              child: Text(
+                _syncMessage!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.green.shade900,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          Expanded(child: _buildBody()),
+        ],
+      ),
     );
   }
 
@@ -590,30 +731,74 @@ class _VitalsField extends StatelessWidget {
 }
 
 class _SuccessScreen extends StatelessWidget {
-  const _SuccessScreen({required this.patientName});
+  const _SuccessScreen({
+    required this.patientName,
+    this.isOfflineQueued = false,
+  });
+
   final String patientName;
+  final bool isOfflineQueued;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Vitals Saved')),
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 72),
-            const SizedBox(height: 16),
-            Text(
-              'Vitals recorded for $patientName',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              key: const Key('back_to_triage_button'),
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back to Triage Queue'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isOfflineQueued) ...[
+                Container(
+                  key: const Key('offline_indicator'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.cloud_off, color: Colors.amber.shade900),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Offline mode: Vitals saved locally and queued for sync on reconnect.',
+                          key: const Key('offline_queued_text'),
+                          style: TextStyle(
+                            color: Colors.amber.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Icon(
+                isOfflineQueued ? Icons.cloud_done : Icons.check_circle,
+                color: isOfflineQueued ? Colors.amber.shade800 : Colors.green,
+                size: 72,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                isOfflineQueued
+                    ? 'Vitals queued offline for $patientName'
+                    : 'Vitals recorded for $patientName',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                key: const Key('back_to_triage_button'),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Back to Triage Queue'),
+              ),
+            ],
+          ),
         ),
       ),
     );

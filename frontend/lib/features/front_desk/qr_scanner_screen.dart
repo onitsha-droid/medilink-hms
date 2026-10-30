@@ -133,7 +133,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
                 left: 0,
                 right: 0,
                 child: Text(
-                  'Point at the patient's QR card',
+                  "Point at the patient's QR card",
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white, fontSize: 16),
                 ),

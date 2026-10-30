@@ -38,8 +38,11 @@ final authProvider =
 });
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._api) : super(const AuthStateLoading()) {
-    _restoreSession();
+  AuthNotifier(this._api, [AuthState? initialState])
+      : super(initialState ?? const AuthStateLoading()) {
+    if (initialState == null) {
+      _restoreSession();
+    }
   }
 
   final ApiClient _api;

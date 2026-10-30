@@ -56,12 +56,14 @@ class PatientQueueScreen extends ConsumerWidget {
         :final position,
         :final estimatedWaitMinutes,
         :final isUrgent,
+        :final isFromCache,
       ) =>
         _ActiveQueueView(
           key: const Key('queue_active'),
           position: position,
           estimatedWaitMinutes: estimatedWaitMinutes,
           isUrgent: isUrgent,
+          isFromCache: isFromCache,
         ),
     };
   }
@@ -75,11 +77,13 @@ class _ActiveQueueView extends StatelessWidget {
     required this.position,
     required this.estimatedWaitMinutes,
     required this.isUrgent,
+    this.isFromCache = false,
   });
 
   final int position;
   final int estimatedWaitMinutes;
   final bool isUrgent;
+  final bool isFromCache;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +95,36 @@ class _ActiveQueueView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isFromCache) ...[
+              Container(
+                key: const Key('offline_indicator'),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.amber.shade400),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_off,
+                        color: Colors.amber.shade900, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Offline — Showing cached position',
+                      key: const Key('queue_offline_badge'),
+                      style: TextStyle(
+                        color: Colors.amber.shade900,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (isUrgent) ...[
               Container(
                 padding:
@@ -252,6 +286,8 @@ class _ConnectionBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, label) = switch (state) {
+      QueueStateActive(:final isFromCache) when isFromCache =>
+        (Colors.amber, 'Offline (Cached)'),
       QueueStateDisconnected() => (Colors.red, 'Offline'),
       QueueStateLoading() => (Colors.orange, 'Connecting'),
       _ => (Colors.green, 'Live'),

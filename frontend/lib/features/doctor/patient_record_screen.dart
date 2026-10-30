@@ -71,11 +71,38 @@ class PatientRecordScreen extends ConsumerWidget {
               history['notes'] as List<ClinicalNote>;
           final vitals =
               history['vitals'] as List<VitalsRecord>;
+          final isOfflineCached = history['isOfflineCached'] == true;
 
           return DefaultTabController(
             length: 3,
             child: Column(
               children: [
+                if (isOfflineCached)
+                  Container(
+                    key: const Key('offline_indicator'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    color: Colors.amber.shade100,
+                    child: Row(
+                      children: [
+                        Icon(Icons.cloud_off,
+                            color: Colors.amber.shade900, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Offline — Showing cached record',
+                            key: const Key('patient_record_offline_badge'),
+                            style: TextStyle(
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const TabBar(
                   tabs: [
                     Tab(text: 'Timeline'),

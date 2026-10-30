@@ -6,8 +6,9 @@ import 'package:medilink_hms/features/queue/queue_provider.dart';
 
 // ── Fake notifier that lets tests inject any QueueState ───────────────────────
 
-class _FakeQueueNotifier extends StateNotifier<QueueState> {
-  _FakeQueueNotifier(super.initial);
+class _FakeQueueNotifier extends QueuePositionNotifier {
+  _FakeQueueNotifier(QueueState state)
+      : super(null, 'test-patient-id', null, state);
 }
 
 Widget buildQueueScreen(QueueState state) {

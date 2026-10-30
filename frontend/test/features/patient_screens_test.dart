@@ -55,6 +55,7 @@ void main() {
         ),
       );
 
+      await tester.ensureVisible(find.byKey(const Key('register_submit_button')));
       await tester.tap(find.byKey(const Key('register_submit_button')));
       await tester.pump();
 

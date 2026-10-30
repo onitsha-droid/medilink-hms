@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:medilink_hms/features/nurse/nurse_triage_screen.dart';
+
+class MockVitalsRepository extends Mock implements VitalsRepository {}
 
 void main() {
   group('VitalsFormScreen — field rendering', () {
@@ -33,6 +37,7 @@ void main() {
       // Enter invalid SpO2 (> 100)
       await tester.enterText(
           find.byKey(const Key('spo2_field')), '110');
+      await tester.ensureVisible(find.byKey(const Key('submit_vitals_button')));
       await tester.tap(find.byKey(const Key('submit_vitals_button')));
       await tester.pump();
 
@@ -44,6 +49,8 @@ void main() {
 
       await tester.enterText(
           find.byKey(const Key('bp_systolic_field')), '350');
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('submit_vitals_button')));
       await tester.tap(find.byKey(const Key('submit_vitals_button')));
       await tester.pump();
 
@@ -69,6 +76,7 @@ void main() {
       await tester.pumpWidget(buildForm());
 
       final toggle = find.byKey(const Key('urgent_toggle'));
+      await tester.ensureVisible(toggle);
       expect(toggle, findsOneWidget);
 
       // Tap to enable urgent
@@ -84,10 +92,13 @@ void main() {
       await tester.pumpWidget(buildForm());
 
       // Enable urgent toggle
-      await tester.tap(find.byKey(const Key('urgent_toggle')));
+      final toggle = find.byKey(const Key('urgent_toggle'));
+      await tester.ensureVisible(toggle);
+      await tester.tap(toggle);
       await tester.pump();
 
       // Try to submit without a reason
+      await tester.ensureVisible(find.byKey(const Key('submit_vitals_button')));
       await tester.tap(find.byKey(const Key('submit_vitals_button')));
       await tester.pump();
 
@@ -99,9 +110,16 @@ void main() {
 
   group('NurseTriageQueueScreen — states', () {
     testWidgets('shows loading indicator initially', (tester) async {
+      final mockRepo = MockVitalsRepository();
+      when(() => mockRepo.getTriageQueue(any()))
+          .thenAnswer((_) => Completer<List<dynamic>>().future);
+
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
+        ProviderScope(
+          overrides: [
+            vitalsRepositoryProvider.overrideWithValue(mockRepo),
+          ],
+          child: const MaterialApp(
             home: NurseTriageQueueScreen(clinicId: 'clinic-123'),
           ),
         ),

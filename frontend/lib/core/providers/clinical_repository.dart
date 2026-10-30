@@ -2,16 +2,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/clinical_models.dart';
 import '../api/hmo_models.dart';
+import '../offline/offline_sync_service.dart';
 
 /// Central repository for all clinical endpoints.
 /// Screens call methods here; providers hold the async state.
 final clinicalRepositoryProvider = Provider<ClinicalRepository>((ref) {
-  return ClinicalRepository(ref.read(apiClientProvider));
+  return ClinicalRepository(
+    ref.read(apiClientProvider),
+    ref.read(offlineSyncServiceProvider),
+  );
 });
 
 class ClinicalRepository {
-  const ClinicalRepository(this._api);
+  const ClinicalRepository(this._api, [this._offlineSync]);
   final ApiClient _api;
+  final OfflineSyncService? _offlineSync;
 
   // ── Encounters ─────────────────────────────────────────────────────────────
 
@@ -24,23 +29,39 @@ class ClinicalRepository {
   }
 
   Future<Map<String, dynamic>> getPatientHistory(String patientId) async {
-    final res = await _api.dio
-        .get<Map<String, dynamic>>('/encounters/patient/$patientId/history');
-    final data = res.data!;
-    return {
-      'encounters': (data['encounters'] as List)
-          .map((e) =>
-              Encounter.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList(),
-      'notes': (data['notes'] as List)
-          .map((n) =>
-              ClinicalNote.fromJson(Map<String, dynamic>.from(n as Map)))
-          .toList(),
-      'vitals': (data['vitals'] as List)
-          .map((v) =>
-              VitalsRecord.fromJson(Map<String, dynamic>.from(v as Map)))
-          .toList(),
-    };
+    try {
+      final res = await _api.dio
+          .get<Map<String, dynamic>>('/encounters/patient/$patientId/history');
+      final data = res.data!;
+      _offlineSync?.cachePatientRecord(patientId, data);
+      return {
+        'encounters': (data['encounters'] as List)
+            .map((e) =>
+                Encounter.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        'notes': (data['notes'] as List)
+            .map((n) =>
+                ClinicalNote.fromJson(Map<String, dynamic>.from(n as Map)))
+            .toList(),
+        'vitals': (data['vitals'] as List)
+            .map((v) =>
+                VitalsRecord.fromJson(Map<String, dynamic>.from(v as Map)))
+            .toList(),
+        'isOfflineCached': false,
+      };
+    } catch (e) {
+      final cached = await _offlineSync?.getCachedPatientRecord(patientId);
+      if (cached != null) {
+        return {
+          'encounters': cached.encounters,
+          'notes': cached.notes,
+          'vitals': cached.vitals,
+          'isOfflineCached': true,
+          'cachedAt': cached.cachedAt,
+        };
+      }
+      rethrow;
+    }
   }
 
   Future<Encounter> openEncounter({

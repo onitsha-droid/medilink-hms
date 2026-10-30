@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:medilink_hms/core/api/api_client.dart';
 import 'package:medilink_hms/core/api/auth_models.dart';
 import 'package:medilink_hms/core/providers/auth_provider.dart';
 import 'package:medilink_hms/core/router/app_router.dart';
@@ -26,16 +27,9 @@ Widget buildTestApp(AuthState overrideState) {
   );
 }
 
-class _FakeAuthNotifier extends StateNotifier<AuthState> {
-  _FakeAuthNotifier(super.initial);
+class _FakeAuthNotifier extends AuthNotifier {
+  _FakeAuthNotifier(AuthState initial) : super(ApiClient(), initial);
 }
-
-const _fakeUser = AuthUser(
-  id: 'u1',
-  name: 'Test',
-  email: 'test@example.com',
-  role: UserRole.patient,
-);
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
@@ -66,17 +60,17 @@ void main() {
 
   group('Route guard — authenticated role routing', () {
     final roleCases = [
-      (UserRole.patient, Routes.patientHome, 'Patient'),
-      (UserRole.frontDesk, Routes.frontDeskHome, 'Front Desk'),
-      (UserRole.nurse, Routes.nurseHome, 'Nurse'),
-      (UserRole.doctor, Routes.doctorHome, 'Doctor'),
-      (UserRole.labScientist, Routes.labHome, 'Lab Scientist'),
-      (UserRole.pharmacist, Routes.pharmacistHome, 'Pharmacist'),
-      (UserRole.billingOfficer, Routes.billingHome, 'Billing Officer'),
-      (UserRole.admin, Routes.adminHome, 'Admin'),
+      (UserRole.patient, Routes.patientHome, 'Patient', 'Patient Dashboard'),
+      (UserRole.frontDesk, Routes.frontDeskHome, 'Front Desk', 'Front Desk Dashboard'),
+      (UserRole.nurse, Routes.nurseHome, 'Nurse', 'Nurse Dashboard'),
+      (UserRole.doctor, Routes.doctorHome, 'Doctor', 'My Queue'),
+      (UserRole.labScientist, Routes.labHome, 'Lab Scientist', 'Lab Worklist'),
+      (UserRole.pharmacist, Routes.pharmacistHome, 'Pharmacist', 'Prescription Inbox'),
+      (UserRole.billingOfficer, Routes.billingHome, 'Billing Officer', 'Billing Dashboard'),
+      (UserRole.admin, Routes.adminHome, 'Admin', 'Admin Dashboard'),
     ];
 
-    for (final (role, _, label) in roleCases) {
+    for (final (role, _, label, expectedTitle) in roleCases) {
       testWidgets('role $label lands on its own dashboard', (tester) async {
         final user = AuthUser(
           id: 'u1',
@@ -92,8 +86,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // The dashboard app-bar title contains the role label
-        expect(find.text('$label Dashboard'), findsOneWidget);
+        // The dashboard app-bar title contains the expected label
+        expect(find.text(expectedTitle), findsOneWidget);
       });
     }
   });
