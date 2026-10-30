@@ -1,0 +1,95 @@
+name: Staging Deploy & Patrol QA Gate
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-staging-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Job 1: Build Docker Image & Deploy to Staging ────────────────────────────
+  build-and-deploy-staging:
+    name: Build Docker Image & Deploy to Staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          load: true
+          tags: |
+            medilink-api:staging
+            medilink-api:${{ github.sha }}
+
+      - name: Deploy to Staging (Separate MongoDB Atlas Instance)
+        env:
+          MONGODB_URI_STAGING: ${{ secrets.MONGODB_URI_STAGING || 'mongodb+srv://staging-cluster.mongodb.net/medilink_staging' }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET_STAGING || 'staging-jwt-secret-do-not-use-in-production' }}
+          JWT_EXPIRES_IN: 1d
+          PORT: 3000
+          NODE_ENV: staging
+        run: |
+          echo "Deploying medilink-api:staging to Staging environment..."
+          # Run the container against the staging MongoDB Atlas instance
+          docker run -d \
+            --name medilink-api-staging \
+            -p 3000:3000 \
+            -e NODE_ENV=staging \
+            -e PORT=3000 \
+            -e MONGODB_URI="${MONGODB_URI_STAGING}" \
+            -e JWT_SECRET="${JWT_SECRET}" \
+            -e JWT_EXPIRES_IN="${JWT_EXPIRES_IN}" \
+            medilink-api:staging
+
+          echo "Awaiting Staging service health check..."
+          for i in {1..30}; do
+            if curl -s -f http://localhost:3000/health; then
+              echo "Staging API is healthy and reachable!"
+              break
+            fi
+            echo "Waiting for Staging API to respond... ($i/30)"
+            sleep 2
+          done
+
+  # ── Job 2: Patrol E2E Suite as QA Gate ───────────────────────────────────────
+  patrol-e2e-gate:
+    name: Patrol E2E Suite QA Gate
+    needs: build-and-deploy-staging
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.19.x"
+          channel: "stable"
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install Patrol CLI
+        run: dart pub global activate patrol_cli
+
+      - name: Run Patrol Patient Journey E2E Suite
+        env:
+          API_BASE_URL: http://localhost:3000
+        run: |
+          echo "Executing Patrol E2E patient journey test (11 phases)..."
+          flutter test integration_test/patient_journey_test.dart

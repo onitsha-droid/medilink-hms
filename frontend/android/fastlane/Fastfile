@@ -1,0 +1,34 @@
+default_platform(:android)
+
+platform :android do
+  desc "Runs frontend unit and widget tests prior to build"
+  lane :test do
+    Dir.chdir("../..") do
+      sh("flutter", "test")
+    end
+  end
+
+  desc "Build APK for internal staging distribution"
+  lane :staging do
+    Dir.chdir("../..") do
+      sh("flutter", "build", "apk", "--flavor", "staging", "--target", "lib/main.dart")
+    end
+    # Store publishing stays disabled for now
+    UI.message("Staging APK built successfully. Store publishing is disabled.")
+  end
+
+  desc "Build App Bundle for internal QA testing"
+  lane :beta do
+    Dir.chdir("../..") do
+      sh("flutter", "build", "appbundle", "--flavor", "staging")
+    end
+    # upload_to_play_store(track: 'internal') - DISABLED: store publishing disabled for now
+    UI.message("Beta App Bundle built. Play Store publishing is disabled for now.")
+  end
+
+  desc "Production release lane — Store publishing is intentionally disabled"
+  lane :deploy do
+    # Store publishing stays disabled for now
+    UI.user_error!("Store publishing is disabled for now per project requirements.")
+  end
+end
