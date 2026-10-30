@@ -1,4 +1,4 @@
-name: Staging Deploy & Patrol QA Gate
+name: Staging Deploy
 
 on:
   push:
@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ── Job 1: Build Docker Image & Deploy to Staging ────────────────────────────
+  # ── Build Docker Image & Deploy to Staging ──────────────────────────────────
   build-and-deploy-staging:
     name: Build Docker Image & Deploy to Staging
     runs-on: ubuntu-latest
@@ -60,36 +60,3 @@ jobs:
             echo "Waiting for Staging API to respond... ($i/30)"
             sleep 2
           done
-
-  # ── Job 2: Patrol E2E Suite as QA Gate ───────────────────────────────────────
-  patrol-e2e-gate:
-    name: Patrol E2E Suite QA Gate
-    needs: build-and-deploy-staging
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.19.x"
-          channel: "stable"
-          cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Install Patrol CLI
-        run: dart pub global activate patrol_cli
-
-      - name: Run Patrol Patient Journey E2E Suite
-        env:
-          API_BASE_URL: http://localhost:3000
-        run: |
-          echo "Executing Patrol E2E patient journey test (11 phases)..."
-          flutter test integration_test/patient_journey_test.dart

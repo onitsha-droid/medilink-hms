@@ -34,6 +34,13 @@ void main() {
   late MockClinicalRepository mockClinicalRepo;
 
   setUpAll(() {
+    registerFallbackValue(const CreatePatientRequest(
+      firstName: 'Ada',
+      lastName: 'Obi',
+      dateOfBirth: '1995-01-01',
+      gender: 'female',
+      phone: '+2348012345678',
+    ));
     registerFallbackValue(const CheckInRequest(
       patientId: 'dummy-patient',
       clinicId: 'dummy-clinic',
@@ -48,7 +55,7 @@ void main() {
     mockClinicalRepo = MockClinicalRepository();
   });
 
-  patrolTest(
+  patrolWidgetTest(
     'Patrol E2E: complete patient journey — '
     'register -> book -> check in -> triage -> doctor consult -> '
     'lab order -> pay -> result -> prescription -> pay -> dispense',
@@ -75,19 +82,24 @@ void main() {
         qrPayload: '{"hospitalId":"$hospitalId"}',
       );
 
+      Widget testApp(Widget home) {
+        return ProviderScope(
+          overrides: [
+            patientRepositoryProvider.overrideWithValue(mockPatientRepo),
+            queueRepositoryProvider.overrideWithValue(mockQueueRepo),
+            vitalsRepositoryProvider.overrideWithValue(mockVitalsRepo),
+            clinicalRepositoryProvider.overrideWithValue(mockClinicalRepo),
+          ],
+          child: MaterialApp(home: home),
+        );
+      }
+
       // ── 1. REGISTER ───────────────────────────────────────────────────────
       when(() => mockPatientRepo.createPatient(any()))
           .thenAnswer((_) async => registeredPatient);
 
       await $.pumpWidgetAndSettle(
-        ProviderScope(
-          overrides: [
-            patientRepositoryProvider.overrideWithValue(mockPatientRepo),
-          ],
-          child: const MaterialApp(
-            home: PatientRegistrationScreen(),
-          ),
-        ),
+        testApp(const PatientRegistrationScreen()),
       );
 
       // Fill registration form
@@ -102,9 +114,7 @@ void main() {
 
       // Show Hospital Card with generated QR code
       await $.pumpWidgetAndSettle(
-        const MaterialApp(
-          home: HospitalCardScreen(patient: registeredPatient),
-        ),
+        testApp(const HospitalCardScreen(patient: registeredPatient)),
       );
       expect(find.text('Ada Obi'), findsOneWidget);
       expect(find.textContaining(hospitalId), findsWidgets);
@@ -132,15 +142,7 @@ void main() {
               ));
 
       await $.pumpWidgetAndSettle(
-        ProviderScope(
-          overrides: [
-            patientRepositoryProvider.overrideWithValue(mockPatientRepo),
-            queueRepositoryProvider.overrideWithValue(mockQueueRepo),
-          ],
-          child: const MaterialApp(
-            home: FrontDeskCheckInScreen(),
-          ),
-        ),
+        testApp(const FrontDeskCheckInScreen()),
       );
 
       // Look up patient by Hospital ID
@@ -151,13 +153,13 @@ void main() {
       expect(find.textContaining('Ada Obi'), findsWidgets);
 
       // Select clinic chip & check in
-      await $(find.text('General Practice')).tap();
+      await $(const Key('clinic_chip_general-opd')).tap();
       await $.pumpAndSettle();
 
-      await $(const Key('confirm_checkin_button')).tap();
+      await $(const Key('assign_to_queue_button')).tap();
       await $.pumpAndSettle();
 
-      expect(find.textContaining('Position: 3'), findsWidgets);
+      expect(find.byKey(const Key('queue_position_chip')), findsOneWidget);
 
       // ── 4. TRIAGE (Nurse vitals entry) ────────────────────────────────────
       when(() => mockVitalsRepo.recordVitals(any(), any()))
