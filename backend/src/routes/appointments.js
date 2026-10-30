@@ -2,7 +2,7 @@
 
 const express = require('express');
 const mongoose = require('mongoose');
-const { body, param, validationResult } = require('express-validator');
+const { body, param, query, validationResult } = require('express-validator');
 const { Appointment } = require('../models/Appointment');
 const { Patient } = require('../models/Patient');
 const { Clinic } = require('../models/Clinic');
@@ -116,8 +116,20 @@ router.post(
 router.get(
   '/',
   authorize('Patient', 'Front Desk', 'Admin', 'Nurse', 'Doctor'),
+  [
+    query('clinicId').optional().isMongoId().withMessage('Invalid clinic ID'),
+    query('patientId').optional().isMongoId().withMessage('Invalid patient ID'),
+    query('date').optional().isISO8601().withMessage('Invalid date format'),
+    query('status')
+      .optional()
+      .isIn(['scheduled', 'arrived', 'completed', 'cancelled'])
+      .withMessage('Invalid status'),
+  ],
   async (req, res, next) => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
       const filter = {};
       if (req.query.clinicId) filter.clinic = req.query.clinicId;
       if (req.query.patientId) filter.patient = req.query.patientId;

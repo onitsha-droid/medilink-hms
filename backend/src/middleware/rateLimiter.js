@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
  */
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -16,14 +16,27 @@ const globalLimiter = rateLimit({
 
 /**
  * Stricter limiter for auth endpoints to slow brute-force attempts.
- * 10 requests per IP per 15-minute window.
+ * 5 requests per IP per 15-minute window in production/development.
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts, please try again later.' },
 });
 
-module.exports = { globalLimiter, authLimiter };
+/**
+ * Stricter limiter for payment initialization and verification endpoints.
+ * 10 requests per IP per 15-minute window in production/development.
+ */
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many payment requests, please try again later.' },
+});
+
+module.exports = { globalLimiter, authLimiter, paymentLimiter };
+

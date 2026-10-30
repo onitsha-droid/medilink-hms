@@ -118,7 +118,7 @@ router.patch(
   '/:id/restock',
   authorize('Admin'),
   [
-    param('id').isMongoId(),
+    param('id').isMongoId().withMessage('Invalid inventory ID'),
     body('quantity').isInt({ min: 1 }).withMessage('quantity must be ≥ 1'),
   ],
   async (req, res, next) => {

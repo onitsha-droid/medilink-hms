@@ -49,13 +49,16 @@ router.get(
   '/',
   authorize('Billing Officer', 'Admin'),
   [
-    query('status').optional().isIn(['pending', 'paid', 'cancelled']),
-    query('patientId').optional().isMongoId(),
-    query('page').optional().isInt({ min: 1 }),
-    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('status').optional().isIn(['pending', 'paid', 'cancelled']).withMessage('Invalid status'),
+    query('patientId').optional().isMongoId().withMessage('Invalid patient ID'),
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be an integer >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be between 1 and 100'),
   ],
   async (req, res, next) => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
       const { status, patientId, page = 1, limit = 20 } = req.query;
 
       const filter = {};
@@ -89,14 +92,15 @@ router.get(
 router.get(
   '/my',
   authorize('Patient'),
+  [
+    query('patientId').isMongoId().withMessage('Valid patientId query parameter is required'),
+  ],
   async (req, res, next) => {
     try {
-      // We cannot resolve Patient._id from User._id without a join here.
-      // The client must pass their patientId as a query param (set at login).
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
       const { patientId } = req.query;
-      if (!patientId) {
-        return next(createError('patientId query parameter is required', 400));
-      }
 
       const invoices = await Invoice.find({ patient: patientId })
         .sort({ createdAt: -1 })
@@ -139,7 +143,7 @@ router.patch(
   '/:id/adjust',
   authorize('Billing Officer', 'Admin'),
   [
-    param('id').isMongoId(),
+    param('id').isMongoId().withMessage('Invalid invoice ID'),
     body('deltaKobo')
       .isInt()
       .withMessage('deltaKobo must be an integer (positive=increase, negative=discount)'),
@@ -174,7 +178,7 @@ router.patch(
 router.post(
   '/:id/cancel',
   authorize('Billing Officer', 'Admin'),
-  param('id').isMongoId(),
+  param('id').isMongoId().withMessage('Invalid invoice ID'),
   async (req, res, next) => {
     try {
       const errors = validationResult(req);

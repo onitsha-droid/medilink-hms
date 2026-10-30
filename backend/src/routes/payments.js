@@ -10,6 +10,7 @@ const { LabRequest } = require('../models/LabRequest');
 const { Prescription } = require('../models/Prescription');
 const stellar = require('../services/stellar');
 const { authenticate, authorize } = require('../middleware/auth');
+const { paymentLimiter } = require('../middleware/rateLimiter');
 const { createError } = require('../middleware/errorHandler');
 const config = require('../config');
 const logger = require('../utils/logger');
@@ -19,6 +20,7 @@ const router = express.Router();
 // ── POST /payments/initialize — Patient initiates Paystack payment ─────────────
 router.post(
   '/initialize',
+  paymentLimiter,
   authenticate,
   authorize('Patient', 'Billing Officer', 'Admin'),
   [
@@ -200,7 +202,7 @@ router.get(
   '/status/:invoiceId',
   authenticate,
   authorize('Patient', 'Billing Officer', 'Admin'),
-  param('invoiceId').isMongoId(),
+  param('invoiceId').isMongoId().withMessage('Invalid invoice ID'),
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
@@ -223,6 +225,7 @@ router.get(
 // No money moves here — this just returns the payment details.
 router.post(
   '/stablecoin/request',
+  paymentLimiter,
   authenticate,
   authorize('Patient', 'Billing Officer', 'Admin'),
   [body('invoiceId').isMongoId().withMessage('invoiceId must be a valid Mongo ID')],
@@ -259,6 +262,7 @@ router.post(
 // Idempotent: calling again on an already-paid invoice is a no-op.
 router.post(
   '/stablecoin/confirm',
+  paymentLimiter,
   authenticate,
   authorize('Patient', 'Billing Officer', 'Admin'),
   [body('invoiceId').isMongoId().withMessage('invoiceId must be a valid Mongo ID')],

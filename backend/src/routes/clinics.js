@@ -68,7 +68,7 @@ router.get(
 router.patch(
   '/:id',
   authorize('Admin'),
-  [param('id').isMongoId(), ...clinicRules.map((r) => r.optional())],
+  [param('id').isMongoId().withMessage('Invalid clinic ID'), ...clinicRules.map((r) => r.optional())],
   async (req, res, next) => {
     try {
       const errors = validationResult(req);

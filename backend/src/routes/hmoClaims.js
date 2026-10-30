@@ -139,13 +139,17 @@ router.get(
   [
     query('status')
       .optional()
-      .isIn(['pending', 'approved', 'partially_paid', 'rejected', 'manual_review']),
-    query('invoiceId').optional().isMongoId(),
-    query('page').optional().isInt({ min: 1 }),
-    query('limit').optional().isInt({ min: 1, max: 100 }),
+      .isIn(['pending', 'approved', 'partially_paid', 'rejected', 'manual_review'])
+      .withMessage('Invalid status'),
+    query('invoiceId').optional().isMongoId().withMessage('Invalid invoice ID'),
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be an integer >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be between 1 and 100'),
   ],
   async (req, res, next) => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
       const { status, invoiceId, page = 1, limit = 20 } = req.query;
       const filter = {};
       if (status) filter.status = status;
@@ -177,7 +181,7 @@ router.get(
 router.get(
   '/:id',
   authorize('Billing Officer', 'Admin', 'Patient'),
-  param('id').isMongoId(),
+  param('id').isMongoId().withMessage('Invalid claim ID'),
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
@@ -201,7 +205,7 @@ router.patch(
   '/:id/resolve',
   authorize('Billing Officer', 'Admin'),
   [
-    param('id').isMongoId(),
+    param('id').isMongoId().withMessage('Invalid claim ID'),
     body('resolution')
       .isIn(['approved', 'rejected'])
       .withMessage('resolution must be approved or rejected'),

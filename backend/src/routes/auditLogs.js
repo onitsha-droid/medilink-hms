@@ -15,14 +15,20 @@ router.get(
   '/',
   authorize('Admin'),
   [
-    query('userId').optional().isString(),
-    query('patientId').optional().isString(),
-    query('anchorStatus').optional().isIn(['pending', 'anchored', 'failed']),
-    query('page').optional().isInt({ min: 1 }),
-    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('userId').optional().isMongoId().withMessage('Invalid userId'),
+    query('patientId').optional().isMongoId().withMessage('Invalid patientId'),
+    query('anchorStatus')
+      .optional()
+      .isIn(['pending', 'anchored', 'failed'])
+      .withMessage('Invalid anchorStatus'),
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be an integer >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be between 1 and 100'),
   ],
   async (req, res, next) => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
       const { userId, patientId, anchorStatus, page = 1, limit = 20 } = req.query;
       const filter = {};
       if (userId) filter.userId = userId;

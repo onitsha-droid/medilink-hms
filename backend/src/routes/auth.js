@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { body, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 const { User } = require('../models/User');
 const { signToken } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimiter');
@@ -94,6 +94,7 @@ router.patch(
   authenticate,
   authorize('Admin'),
   [
+    param('id').isMongoId().withMessage('Invalid user ID'),
     body('role').isIn(ROLES).withMessage(`role must be one of: ${ROLES.join(', ')}`),
   ],
   async (req, res, next) => {
@@ -120,8 +121,12 @@ router.patch(
   '/users/:id/deactivate',
   authenticate,
   authorize('Admin'),
+  param('id').isMongoId().withMessage('Invalid user ID'),
   async (req, res, next) => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return next(createError(errors.array()[0].msg, 400));
+
       const user = await User.findByIdAndUpdate(
         req.params.id,
         { $set: { isActive: false } },
