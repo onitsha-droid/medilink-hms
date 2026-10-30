@@ -40,6 +40,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
+  patrol: ^3.7.0
   flutter_lints: ^3.0.0
   build_runner: ^2.4.9
   riverpod_generator: ^2.4.0
