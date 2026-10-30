@@ -151,6 +151,7 @@ cd medilink-hms
 cd backend
 npm install
 cp .env.example .env    # then fill in values (see Configuration)
+npm run seed:demo       # populate demo dataset across all 8 roles (see DEMO.md)
 npm run dev             # API on http://localhost:3000
 ```
 
@@ -203,22 +204,31 @@ Create `backend/.env` from `.env.example`.
 | `HOSPITAL_STELLAR_SECRET` | Hospital account secret key | `S...` |
 | `HMO_CONTRACT_ID` | Deployed claims contract ID | `C...` |
 
+> In CI/CD, a separate MongoDB Atlas instance is provided via `MONGODB_URI_STAGING`.
+
 ---
 
 ## Project Structure
 
 ```text
 medilink-hms/
-├── backend/            # Node.js / Express API, Socket.IO, Stellar SDK integration
+├── backend/            # Node.js / Express API, Socket.IO, Stellar SDK, Jest test suite
+│   ├── scripts/        # seed.js, seed_demo.js
+│   ├── src/            # Models, routes, middleware, services, utils
+│   └── tests/          # Jest & Supertest integration tests
 ├── frontend/           # Flutter mobile app
+│   ├── android/fastlane/ # Android Fastlane lanes (store publishing disabled)
+│   ├── ios/fastlane/     # iOS Fastlane lanes (store publishing disabled)
+│   ├── integration_test/ # Patrol E2E patient journey test suite
+│   ├── lib/            # Riverpod state, go_router guards, Hive offline sync, UI
+│   └── test/           # Unit and widget test suite
 ├── contracts/
-│   └── hmo_claims/     # Soroban (Rust) HMO claims contract
-├── scripts/            # Load tests and utilities
-├── .github/workflows/  # CI/CD pipelines
-└── docker-compose.yml
+│   └── hmo_claims/     # Soroban (Rust) HMO claims smart contract
+├── .github/workflows/  # pr.yml (PR checks) and deploy-staging.yml (staging + Patrol QA gate)
+├── DEMO.md             # 10-minute walkthrough script following 8 roles in order
+├── docker-compose.yml  # Local multi-service environment
+└── README.md           # Single source of truth
 ```
-
-<!-- TODO: adjust to match the actual repo layout. -->
 
 ---
 
@@ -264,13 +274,11 @@ GitHub Actions drives the pipeline:
 
 - [x] Registration, QR check-in, and live queue
 - [x] Digital records, lab, and pharmacy flows
-- [ ] Stablecoin payment settlement
-- [ ] Soroban HMO claims automation
-- [ ] On-chain audit anchoring
+- [x] Stablecoin payment settlement
+- [x] Soroban HMO claims automation
+- [x] On-chain audit anchoring
 - [ ] Diaspora funding via Stellar anchors
 - [ ] Pubnet launch after security audit
-
-<!-- TODO: update checkboxes to reflect real project status. -->
 
 ---
 

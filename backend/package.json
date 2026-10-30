@@ -9,7 +9,8 @@
     "lint": "eslint src tests --ext .js",
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --watch",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "seed:demo": "node scripts/seed_demo.js"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "12.3.0",
